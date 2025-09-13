@@ -6,6 +6,7 @@ import { insertOrderSchema, updateOrderSchema } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { requirePermission, requireRole } from "./permissions";
 import { parse as parseUrl } from "url";
 import { parse as parseCookie } from "cookie";
 
@@ -15,16 +16,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
   await setupAuth(app);
   
-  // Create WebSocket server
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  // Get session parser for WebSocket authentication
+  const { getSession } = await import("./replitAuth");
+  const sessionParser = getSession();
   
-  // Store connected clients
-  const clients = new Set<WebSocket>();
+  // Create WebSocket server with authentication
+  const wss = new WebSocketServer({ 
+    server: httpServer, 
+    path: '/ws',
+    verifyClient: (info) => {
+      return new Promise((resolve) => {
+        // Parse session from request using the session middleware
+        sessionParser(info.req, {} as any, async () => {
+          try {
+            const session = (info.req as any).session;
+            if (!session?.passport?.user?.sub) {
+              console.log('WebSocket connection rejected: No authenticated session');
+              resolve(false);
+              return;
+            }
+
+            // Verify user exists and has read permissions
+            const user = await storage.getUser(session.passport.user.sub);
+            if (!user) {
+              console.log('WebSocket connection rejected: User not found');
+              resolve(false);
+              return;
+            }
+
+            // Store user info for connection
+            (info.req as any).userId = user.id;
+            (info.req as any).userRole = user.role;
+            resolve(true);
+          } catch (error) {
+            console.error('WebSocket auth error:', error);
+            resolve(false);
+          }
+        });
+      });
+    }
+  });
   
-  // WebSocket connection handling
-  wss.on('connection', (ws) => {
+  // Store connected clients with user info
+  interface AuthenticatedWebSocket extends WebSocket {
+    userId?: string;
+    userRole?: string;
+  }
+  const clients = new Set<AuthenticatedWebSocket>();
+  
+  // WebSocket connection handling for authenticated users only
+  wss.on('connection', (ws: AuthenticatedWebSocket, request) => {
+    // Set user info on WebSocket connection
+    ws.userId = (request as any).userId;
+    ws.userRole = (request as any).userRole;
+    
     clients.add(ws);
-    console.log('New WebSocket connection. Total clients:', clients.size);
+    console.log(`New authenticated WebSocket connection from user ${ws.userId} (${ws.userRole}). Total clients:`, clients.size);
     
     // Send connection count to all clients
     broadcastToClients({
@@ -34,7 +81,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     ws.on('close', () => {
       clients.delete(ws);
-      console.log('WebSocket disconnected. Total clients:', clients.size);
+      console.log(`WebSocket disconnected for user ${ws.userId}. Total clients:`, clients.size);
       
       // Send updated connection count
       broadcastToClients({
@@ -155,9 +202,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
+
+  // Admin user management routes
+  app.get('/api/admin/users', requireRole('admin'), async (req: any, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  const updateRoleSchema = z.object({
+    role: z.enum(['admin', 'operator', 'viewer'])
+  });
+
+  app.patch('/api/admin/users/:id/role', requireRole('admin'), async (req: any, res) => {
+    try {
+      const validation = updateRoleSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid role",
+          errors: validation.error.issues
+        });
+      }
+
+      const { role } = validation.data;
+      const user = await storage.updateUserRole(req.params.id, role);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
   
   // Get orders with pagination and filtering
-  app.get('/api/orders', isAuthenticated, async (req, res) => {
+  app.get('/api/orders', requirePermission('orders.read'), async (req, res) => {
     try {
       const { search, status, page = '1', limit = '50' } = req.query;
       const pageNum = parseInt(page as string);
@@ -184,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get order stats
-  app.get('/api/orders/stats', isAuthenticated, async (req, res) => {
+  app.get('/api/orders/stats', requirePermission('orders.read'), async (req, res) => {
     try {
       const stats = await storage.getOrderStats();
       res.json(stats);
@@ -195,7 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get single order
-  app.get('/api/orders/:id', isAuthenticated, async (req, res) => {
+  app.get('/api/orders/:id', requirePermission('orders.read'), async (req, res) => {
     try {
       const order = await storage.getOrder(req.params.id);
       if (!order) {
@@ -209,7 +294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Create new order
-  app.post('/api/orders', isAuthenticated, async (req, res) => {
+  app.post('/api/orders', requirePermission('orders.create'), async (req, res) => {
     try {
       const validatedData = insertOrderSchema.parse(req.body);
       const order = await storage.createOrder(validatedData);
@@ -227,7 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update order
-  app.patch('/api/orders/:id', isAuthenticated, async (req, res) => {
+  app.patch('/api/orders/:id', requirePermission('orders.update'), async (req, res) => {
     try {
       const validatedData = updateOrderSchema.parse(req.body);
       const order = await storage.updateOrder(req.params.id, validatedData);
@@ -248,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Delete order
-  app.delete('/api/orders/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/orders/:id', requirePermission('orders.delete'), async (req, res) => {
     try {
       const success = await storage.deleteOrder(req.params.id);
       if (!success) {
@@ -261,8 +346,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get connected clients count
-  app.get('/api/clients', (req, res) => {
+  // Get connected clients count (admin only)
+  app.get('/api/clients', requireRole('admin'), (req, res) => {
     res.json({ count: clients.size });
   });
 

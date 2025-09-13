@@ -160,6 +160,11 @@ export default function Dashboard() {
                           {user.email}
                         </p>
                       )}
+                      {user?.role && (
+                        <p className="text-xs leading-none text-muted-foreground font-medium" data-testid="text-user-role">
+                          Role: {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                        </p>
+                      )}
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />

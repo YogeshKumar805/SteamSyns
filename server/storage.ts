@@ -7,6 +7,8 @@ export interface IStorage {
   // User methods for Replit Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  updateUserRole(id: string, role: string): Promise<User | undefined>;
   
   // Order methods
   getOrders(search?: string, status?: string, limit?: number, offset?: number): Promise<{ orders: Order[], total: number }>;
@@ -41,6 +43,23 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+    return allUsers;
+  }
+
+  async updateUserRole(id: string, role: string): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        role: role as any,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return user || undefined;
   }
 
   async getOrders(search?: string, status?: string, limit = 50, offset = 0): Promise<{ orders: Order[], total: number }> {
