@@ -5,9 +5,15 @@ import { storage } from "./storage";
 import { insertOrderSchema, updateOrderSchema } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
+import { setupAuth, isAuthenticated } from "./replitAuth";
+import { parse as parseUrl } from "url";
+import { parse as parseCookie } from "cookie";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+  
+  // Set up authentication
+  await setupAuth(app);
   
   // Create WebSocket server
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
@@ -138,8 +144,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // API Routes
   
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+  
   // Get orders with pagination and filtering
-  app.get('/api/orders', async (req, res) => {
+  app.get('/api/orders', isAuthenticated, async (req, res) => {
     try {
       const { search, status, page = '1', limit = '50' } = req.query;
       const pageNum = parseInt(page as string);
@@ -166,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get order stats
-  app.get('/api/orders/stats', async (req, res) => {
+  app.get('/api/orders/stats', isAuthenticated, async (req, res) => {
     try {
       const stats = await storage.getOrderStats();
       res.json(stats);
@@ -177,7 +195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get single order
-  app.get('/api/orders/:id', async (req, res) => {
+  app.get('/api/orders/:id', isAuthenticated, async (req, res) => {
     try {
       const order = await storage.getOrder(req.params.id);
       if (!order) {
@@ -191,7 +209,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Create new order
-  app.post('/api/orders', async (req, res) => {
+  app.post('/api/orders', isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertOrderSchema.parse(req.body);
       const order = await storage.createOrder(validatedData);
@@ -209,7 +227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update order
-  app.patch('/api/orders/:id', async (req, res) => {
+  app.patch('/api/orders/:id', isAuthenticated, async (req, res) => {
     try {
       const validatedData = updateOrderSchema.parse(req.body);
       const order = await storage.updateOrder(req.params.id, validatedData);
@@ -230,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Delete order
-  app.delete('/api/orders/:id', async (req, res) => {
+  app.delete('/api/orders/:id', isAuthenticated, async (req, res) => {
     try {
       const success = await storage.deleteOrder(req.params.id);
       if (!success) {

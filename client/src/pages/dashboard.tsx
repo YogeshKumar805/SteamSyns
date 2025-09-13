@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useOrders } from "@/hooks/useOrders";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useAuth } from "@/hooks/useAuth";
 import StatsCards from "@/components/StatsCards";
 import OrdersTable from "@/components/OrdersTable";
 import CreateOrderModal from "@/components/CreateOrderModal";
@@ -8,7 +9,9 @@ import NotificationToast from "@/components/NotificationToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Users, Bell, Download } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Search, Plus, Users, Bell, Download, LogOut, User } from "lucide-react";
 
 export default function Dashboard() {
   const [search, setSearch] = useState("");
@@ -21,6 +24,7 @@ export default function Dashboard() {
     timestamp: Date;
   }>>([]);
 
+  const { user } = useAuth();
   const { 
     orders, 
     stats, 
@@ -81,6 +85,30 @@ export default function Dashboard() {
 
   const connectionDisplay = getConnectionStatusDisplay();
 
+  const handleLogout = () => {
+    window.location.href = "/api/logout";
+  };
+
+  const getUserDisplayName = () => {
+    if (!user) return "User";
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`;
+    }
+    if (user.firstName) return user.firstName;
+    if (user.email) return user.email;
+    return "User";
+  };
+
+  const getUserInitials = () => {
+    if (!user) return "U";
+    if (user.firstName && user.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    }
+    if (user.firstName) return user.firstName[0].toUpperCase();
+    if (user.email) return user.email[0].toUpperCase();
+    return "U";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -112,14 +140,48 @@ export default function Dashboard() {
                 <span>clients</span>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <Button variant="ghost" size="sm" data-testid="button-notifications">
-                  <Bell className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" data-testid="button-export">
-                  <Download className="w-4 h-4" />
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full" data-testid="button-user-menu">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.profileImageUrl || undefined} alt={getUserDisplayName()} />
+                      <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none" data-testid="text-user-name">
+                        {getUserDisplayName()}
+                      </p>
+                      {user?.email && (
+                        <p className="text-xs leading-none text-muted-foreground" data-testid="text-user-email">
+                          {user.email}
+                        </p>
+                      )}
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem data-testid="menu-item-profile">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-testid="menu-item-notifications">
+                    <Bell className="mr-2 h-4 w-4" />
+                    <span>Notifications</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-testid="menu-item-export">
+                    <Download className="mr-2 h-4 w-4" />
+                    <span>Export Data</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} data-testid="menu-item-logout">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
