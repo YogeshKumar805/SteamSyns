@@ -1,0 +1,53 @@
+Introduction (Detailed with Technologies)
+
+In today’s modern application landscape, real-time data delivery has become a critical requirement for systems such as live dashboards, order management platforms, logistics tracking tools, collaborative applications, and monitoring systems. Users expect to see data updates instantly as changes occur — without needing to refresh the page or repeatedly request new data from the server. Traditional polling mechanisms, where clients periodically query the backend to check for updates, are inefficient and place unnecessary load on both the server and the database. As a result, real-time, event-driven architectures have become the preferred solution for enabling dynamic and scalable user experiences.
+
+In this assignment, your objective is to design and implement a system that automatically detects changes in a database table (orders) and pushes those changes in real-time to all connected clients. The system must eliminate polling and instead adopt a push-based architecture. You are free to choose your technology stack, but your implementation should demonstrate a solid understanding of how to design efficient, maintainable, and scalable real-time systems.
+
+You may choose from the following (or equivalent) technologies:
+
+Backend Languages:
+
+JavaScript/TypeScript with Node.js (e.g., using Express, Fastify)
+
+Python (e.g., using FastAPI, Flask, Django Channels)
+
+Java (e.g., using Spring Boot + WebSocket support)
+
+Go (Golang), Ruby, Rust, or any other backend language you're comfortable with
+
+Databases:
+
+PostgreSQL (preferred for its native LISTEN/NOTIFY support and trigger capabilities)
+
+MySQL (can use binlog-based CDC tools like Debezium)
+
+MongoDB (can use change streams for real-time updates)
+
+Client Communication (Real-Time Protocols):
+
+WebSockets (recommended — via native WebSocket API, or libraries like Socket.IO or WS)
+
+Server-Sent Events (SSE)
+
+MQTT or other pub/sub protocols (if appropriate)
+
+Event Detection / Streaming Tools (optional, for advanced solutions):
+
+Database Triggers + LISTEN/NOTIFY (PostgreSQL)
+
+Debezium for Change Data Capture (with Kafka or Redis)
+
+Redis Pub/Sub or Redis Streams for message broadcasting
+
+Kafka or RabbitMQ for event pipelines (optional, advanced)
+
+Client Technologies:
+
+Browser-based apps (HTML/CSS/JavaScript) with WebSocket/SSE support
+
+Terminal-based apps (Node.js, Python scripts, etc.)
+
+React, Vue, Angular (optional, not required)
+
+Your task is to tie these components together into a cohesive system that provides real-time updates when the orders table is changed. Clients connected to the system should instantly receive relevant updates whenever an order is added, modified, or removed. This assignment is as much about architectural thinking and engineering trade-offs as it is about writing code — so please document your decisions and justify your technology choices clearly in the README.
